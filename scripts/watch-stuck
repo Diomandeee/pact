@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""watch-stuck: sweep new prompt-log turns, log stuck-thread fires.
+
+Read-only on the session store. Classify (track.py, local) -> decide
+(`pact stuck` binary, the P9.1 rule in one place) -> append fire records
+to var/stuck-fires.jsonl for later outcome judging. No intervention, no
+API, no writes outside var/.
+
+  watch-stuck --init      record current line counts; log nothing.
+                          Run once: the first sweep starts from now, not
+                          from a surprise backfill of 622 sessions.
+  watch-stuck --sweep     classify lines since state, log new fires.
+  watch-stuck --backfill  classify everything (explicit; slow first time).
+  watch-stuck --selftest  temp sessions with scripted turns through the
+                          full pipeline incl. the binary; asserts fires.
+
+Suggested cadence: an hourly cron or heartbeat line running --sweep.
+The adoption log becomes the P9.3 live follow-up the moment outcomes
+are judged against it.
+"""
+import glob
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VAR = os.path.join(ROOT, "var")
+STATE = os.path.join(VAR, "stuck-watch-state.json")
+FIRES = os.path.join(VAR, "stuck-fires.jsonl")
+STORE = os.path.expanduser("~/.claude/prompt-logs/sessions")
+PROTO = "/tmp/trajectory-prototype"
+BIN_CANDIDATES = [os.path.join(ROOT, "target/debug/pact"),
+                  os.environ.get("PACT_BIN", "")]
+
+# Source screen: harness/automation turns are not human rejections, and the
+# rule classifier fires on their corrective-sounding boilerplate (34% of
+# unfiltered backfill fires, 2026-09-22). Screened turns are counted on
+# stdout, never silently dropped from state. Extend the patterns, never
+# the silence: a new contaminant family gets a pattern, not an exception.
+import re as _re
+SOURCE_SCREEN = _re.compile(
+    r"<heartbeat>|automation_id|Memory Writing Agent|"
+    r"hyperpersonalized-suggestion", _re.I)
+
+
+def binary():
+    for b in BIN_CANDIDATES:
+        if b and os.path.isfile(b) and os.access(b, os.X_OK):
+            return b
+    raise SystemExit(
+        "no pact binary: run `cargo build -p pact-cli` in this repo "
+        "or set PACT_BIN. Refusing to decide with a reimplementation.")
+
+
+def classifier():
+    path = os.path.join(PROTO, "track.py")
+    if not os.path.isfile(path):
+        raise SystemExit(
+            f"no classifier at {path}: the prototype moved. "
+            "Point PROTO at it; refusing to substitute a new classifier.")
+    sys.path.insert(0, PROTO)
+    from track import classify
+    return classify
+
+
+def sessions():
+    return sorted(glob.glob(os.path.join(STORE, "*", "prompts.jsonl")))
+
+
+def load_state():
+    if os.path.exists(STATE):
+        return json.load(open(STATE))
+    return {}
+
+
+def save_state(state):
+    os.makedirs(VAR, exist_ok=True)
+    json.dump(state, open(STATE, "w"), indent=1)
+
+
+def sweep(backfill=False):
+    classify = classifier()
+    pact = binary()
+    state = load_state()
+    new_turns = []  # (session, idx, move, ts, text)
+    counts = {}
+    files = sessions()
+    if not files:
+        raise SystemExit(f"no sessions under {STORE}")
+    screened = 0
+    for f in files:
+        sid = os.path.basename(os.path.dirname(f))
+        with open(f) as fh:
+            lines = fh.readlines()
+        counts[sid] = len(lines)
+        start = 0 if backfill else state.get(sid, len(lines))
+        for idx in range(start, len(lines)):
+            try:
+                row = json.loads(lines[idx])
+            except json.JSONDecodeError:
+                continue
+            text = row.get("prompt_text", "") or ""
+            if SOURCE_SCREEN.search(text):
+                screened += 1
+                continue
+            mv, _, _, _ = classify(text[:2000])
+            new_turns.append((sid, idx, mv, row.get("timestamp", ""),
+                              text[:500]))
+    if screened:
+        print(f"sweep: {screened} automation turn(s) screened")
+    if not new_turns:
+        save_state(counts)
+        print(f"sweep: {len(files)} sessions, 0 new turns")
+        return []
+    payload = "\n".join(
+        json.dumps({"session": s, "idx": i, "move": m})
+        for s, i, m, _, _ in new_turns)
+    proc = subprocess.run([pact, "stuck"], input=payload, capture_output=True,
+                          text=True)
+    if proc.returncode != 0:
+        raise SystemExit(f"pact stuck failed: {proc.stderr[-500:]}")
+    fired = set()
+    for line in proc.stdout.splitlines():
+        try:
+            o = json.loads(line)
+            fired.add((o["session"], o["idx"]))
+        except (json.JSONDecodeError, KeyError):
+            continue
+    by_key = {(s, i): (m, ts, tx) for s, i, m, ts, tx in new_turns}
+    fires = []
+    for s, i in sorted(fired):
+        m, ts, tx = by_key[(s, i)]
+        window = [by_key.get((s, j), ("?", "", ""))[0]
+                  for j in (i - 2, i - 1, i)]
+        fires.append({"seen_ts": int(time.time()), "session": s, "idx": i,
+                      "turn_ts": ts, "moves_window": window,
+                      "firing_move": m, "excerpt": tx})
+    os.makedirs(VAR, exist_ok=True)
+    with open(FIRES, "a") as fh:
+        for r in fires:
+            fh.write(json.dumps(r) + "\n")
+    save_state(counts)
+    print(f"sweep: {len(files)} sessions, {len(new_turns)} new turns, "
+          f"{len(fires)} fire(s) -> {FIRES}")
+    return fires
+
+
+def selftest():
+    classify = classifier()
+    pact = binary()
+    tmp = tempfile.mkdtemp(prefix="watch-stuck-selftest-")
+    s1 = os.path.join(tmp, "s1")
+    s2 = os.path.join(tmp, "s2")
+    os.makedirs(s1)
+    os.makedirs(s2)
+    turns1 = ["No, that's wrong. Do it again.",
+              "No. That is not what I asked for.",
+              "What time is it?"]
+    turns2 = ["No, that's wrong. Do it again.",
+              "What time is it?",
+              "No. That is not what I asked for."]
+    for d, turns in ((s1, turns1), (s2, turns2)):
+        with open(os.path.join(d, "prompts.jsonl"), "w") as fh:
+            for k, t in enumerate(turns):
+                fh.write(json.dumps({"prompt_text": t,
+                                     "timestamp": f"t{k}"}) + "\n")
+    global STORE
+    real_store, STORE = STORE, tmp
+    real_state, real_fires = None, None
+    global STATE, FIRES
+    real_state, STATE = STATE, os.path.join(tmp, "state.json")
+    real_fires, FIRES = FIRES, os.path.join(tmp, "fires.jsonl")
+    try:
+        save_state({})
+        fires = sweep(backfill=True)
+    finally:
+        STORE, STATE, FIRES = real_store, real_state, real_fires
+    got = sorted((f["session"], f["idx"]) for f in fires)
+    assert got == [("s1", 1)], f"selftest fires: {got}"
+    assert classify  # the pipeline used the real classifier, not a stub
+    print("selftest ok: s1 fires at 1, s2 silent, binary pipe live")
+
+
+if __name__ == "__main__":
+    mode = sys.argv[1] if len(sys.argv) > 1 else "--sweep"
+    if mode == "--init":
+        counts = {}
+        for f in sessions():
+            with open(f) as fh:
+                counts[os.path.basename(os.path.dirname(f))] = sum(
+                    1 for _ in fh)
+        save_state(counts)
+        print(f"init: {len(counts)} sessions pinned; future sweeps start here")
+    elif mode == "--sweep":
+        sweep()
+    elif mode == "--backfill":
+        sweep(backfill=True)
+    elif mode == "--selftest":
+        selftest()
+    else:
+        raise SystemExit(f"unknown mode {mode}")

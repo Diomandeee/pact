@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# deploy — put the surface somewhere, and keep its corpus current.
+#
+# THE CORPUS THE SERVER READS MUST BE THE CORPUS YOU EDIT
+#
+# A dashboard over a corpus nobody is editing is a screenshot. The server reads
+# its corpus once at boot, so making a change visible is two things: get the
+# files there, and restart. That is `sync`, and it is one command because a
+# two-command sync is one somebody does half of.
+#
+# EXPOSURE
+#
+# `up` binds to a single address and nothing else. Bind to a tailnet address
+# (100.x.y.z) and the socket is on a CGNAT range that is not routable from the
+# internet at all — a stronger guarantee than a firewall rule, because there is
+# no interface to firewall. Binding to 0.0.0.0 on a machine with a public
+# interface publishes this, and there is no auth. The script refuses.
+#
+#   ./scripts/deploy sync   [target]   rsync the corpus to the worker, then restart its server
+#   ./scripts/deploy install           on the worker: release build, binaries into ~/.local/bin
+#   ./scripts/deploy up     [addr]     build and serve in the foreground (debugging)
+#   ./scripts/deploy check  [addr]     does it answer, and with what
+#   ./scripts/deploy status            where things stand
+
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 2
+
+CORPUS="${PACT_CORPUS:-$HOME/.claude/skills}"
+REMOTE="${PACT_REMOTE:-worker}"
+REMOTE_PATH="${PACT_REMOTE_PATH:-.claude/skills}"   # relative to the worker's \$HOME
+PORT="${PACT_PORT:-8731}"
+SERVE_ADDR="${PACT_ADDR:-127.0.0.1:$PORT}"
+LABEL="com.pact.server"
+
+say() { printf '%-8s %s\n' "$1" "$2"; }
+
+refuse_public() { # addr
+  case "$1" in
+    0.0.0.0:*|"[::]":*|*:*)
+      host="${1%:*}"
+      case "$host" in
+        0.0.0.0|"[::]"|"")
+          say "REFUSED" "binding $1 exposes this to every interface, and there is no auth."
+          say "" "Bind a tailnet address instead: ./scripts/deploy up 100.x.y.z:$PORT"
+          return 1
+          ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
+case "${1:-status}" in
+
+up)
+  addr="${2:-127.0.0.1:$PORT}"
+  refuse_public "$addr" || exit 1
+  say "build" "release"
+  cargo build --release -p pact-server || exit 1
+  say "serve" "$addr from $CORPUS"
+  exec ./target/release/pact-server "$addr" "$CORPUS"
+  ;;
+
+sync)
+  target="${2:-$REMOTE}"
+  if [ "$target" = "local" ]; then
+    say "sync" "local target: the corpus is already where the server reads it"
+  else
+    say "sync" "$CORPUS -> $target:~/$REMOTE_PATH"
+    ssh "$target" "mkdir -p ~/$REMOTE_PATH" || exit 1
+    # -a preserves, --delete makes the remote a mirror rather than a union.
+    # Without it a skill deleted locally lingers and the served numbers are
+    # about a corpus that no longer exists. __pycache__ is the oracle's
+    # bytecode and never part of the corpus.
+    # -L follows symlinks: a copied link resolves on the worker to whatever
+    # stale copy it has there.
+    changed=$(rsync -aiL --delete --exclude '__pycache__' "$CORPUS/" "$target:$REMOTE_PATH/" | grep -c '^[<>c]' || true)
+    say "moved" "$changed path(s)"
+    if [ "${changed:-0}" != "0" ] || [ "${PACT_FORCE_RESTART:-}" = "1" ]; then
+      say "restart" "$target"
+      # A Mac restarts the launchd job; Linux the systemd unit. Either way the
+      # reader reboots, which is the only way a change becomes visible.
+      ssh "$target" "launchctl kickstart -k gui/\$(id -u)/$LABEL 2>/dev/null || systemctl --user restart pact" || exit 1
+    else
+      say "restart" "skipped, nothing moved"
+    fi
+  fi
+  say "ok" "run ./scripts/deploy check to confirm the count moved"
+  ;;
+
+install)
+  # Runs on the worker. The launchd job executes from the internal disk:
+  # launchd refuses a program on the external volume (EX_CONFIG, seen
+  # 2026-11-03), and a corpus server must not depend on a drive being mounted.
+  say "build" "release"
+  cargo build --release -p pact-server -p pact-cli || exit 1
+  mkdir -p "$HOME/.local/bin"
+  cp target/release/pact-server target/release/pact "$HOME/.local/bin/" || exit 1
+  say "installed" "$HOME/.local/bin/{pact-server,pact}"
+  if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+    launchctl kickstart -k "gui/$(id -u)/$LABEL" && say "restart" "$LABEL"
+  else
+    say "note" "$LABEL is not loaded; load a launchd or systemd job for it"
+  fi
+  ;;
+
+check)
+  addr="${2:-$SERVE_ADDR}"
+  meta=$(curl -s --max-time 5 "http://$addr/api/meta")
+  if [ -z "$meta" ]; then
+    say "FAIL" "no answer from $addr"
+    exit 1
+  fi
+  say "ok" "$addr"
+  say "" "$meta"
+  ;;
+
+status)
+  say "corpus" "$CORPUS ($(find "$CORPUS" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ') SKILL.md files)"
+  say "remote" "$REMOTE:~/$REMOTE_PATH"
+  say "serves" "http://$SERVE_ADDR ($LABEL)"
+  if command -v tailscale >/dev/null 2>&1; then
+    self=$(tailscale ip -4 2>/dev/null | head -1)
+    say "tailnet" "${self:-not connected}"
+    peers=$(tailscale status 2>/dev/null | grep -c "active\|^100" || echo 0)
+    say "peers" "$peers known"
+  fi
+  ;;
+
+*)
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+  ;;
+esac

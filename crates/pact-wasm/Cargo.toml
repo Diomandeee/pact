@@ -1,0 +1,41 @@
+[package]
+name = "pact-wasm"
+description = "The engine, across a language boundary. One engine, two callers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# cdylib for the wasm target, rlib so the native test can call the same code.
+# Both, so the differential test compares one implementation reached two ways
+# rather than two implementations that agree.
+crate-type = ["cdylib", "rlib"]
+
+# INV-8: dependencies live at L4, and this is L4. No wasm-bindgen: its CLI is a
+# build step, and the boundary here is a flat buffer that needs none.
+[dependencies]
+pact-core = { path = "../pact-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The one crate that does not inherit the workspace's `forbid(unsafe_code)`,
+# and the exception is declared HERE rather than with an inner attribute so it
+# is visible in the manifest instead of buried at the top of a file. `forbid`
+# cannot be overridden from inside, which is the point of `forbid`.
+#
+# An FFI boundary cannot be written without unsafe: something has to turn a
+# pointer and a length from the host into a slice. The alternative -- a
+# byte-at-a-time API to dodge the lint -- would be slower, longer, and would
+# HIDE the boundary rather than mark it. `scripts/canaries.sh` checks the
+# allowance did not spread past this crate.
+[dev-dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

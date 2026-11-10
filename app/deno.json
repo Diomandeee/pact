@@ -1,0 +1,14 @@
+{
+  "//": "The TypeScript toolchain, entire. One config, no npm, no bundler.",
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false
+  },
+  "tasks": {
+    "check": "deno check src/main.ts src/engine.ts src/canvas.ts",
+    "build": "deno bundle --platform browser src/main.ts -o main.js",
+    "test": "deno test --allow-net --allow-env tests/"
+  },
+  "fmt": { "lineWidth": 80 }
+}

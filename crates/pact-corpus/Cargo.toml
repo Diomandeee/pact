@@ -1,0 +1,18 @@
+[package]
+name = "pact-corpus"
+description = "Read a skill corpus as a graph. SOOP-2 frontmatter in, engine graph out."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# L3 reads the filesystem, which is exactly why it is not L0. INV-1 forbids
+# the engine any I/O; this is the layer that has it, so the engine never needs
+# to.
+[dependencies]
+pact-core = { path = "../pact-core" }
+pact-algebra = { path = "../pact-algebra" }
+
+[lints]
+workspace = true

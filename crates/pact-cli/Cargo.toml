@@ -1,0 +1,33 @@
+[package]
+name = "pact-cli"
+description = "The surface: check, decompose, simulate, export."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "pact_cli_tiers"
+path = "src/tiers.rs"
+
+[[bin]]
+name = "pact"
+path = "src/main.rs"
+
+# No argument-parsing crate. The surface is four subcommands over a corpus
+# path, and a dependency whose job is splitting a Vec<String> would be the
+# largest thing in the workspace.
+[dependencies]
+pact-core = { path = "../pact-core" }
+pact-algebra = { path = "../pact-algebra" }
+pact-corpus = { path = "../pact-corpus" }
+pact-analysis = { path = "../pact-analysis" }
+
+[lints]
+workspace = true
+
+# Examples that read pPACT turn files. Dependencies live at L4 (INV-8),
+# which is why arm4_agreement moved here from pact-analysis.
+[dev-dependencies]
+serde_json = "1"

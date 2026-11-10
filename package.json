@@ -1,0 +1,16 @@
+{
+  "name": "pact-convex",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PACT corpus mirror. This package.json exists ONLY because the Convex CLI is npm-only; the browser app is Deno (see app/deno.json) and stays that way.",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy"
+  },
+  "dependencies": {
+    "convex": "1.43.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

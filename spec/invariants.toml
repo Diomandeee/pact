@@ -1,0 +1,33 @@
+# Locked constants. Versioned SEPARATELY from the crates.
+#
+# Changing any value here is a SPEC BUMP, not a patch release. A barcode is
+# only comparable across generations that share a spec_version, because
+# otherwise you are comparing measurements taken with different rulers.
+spec_version = 1
+
+[invariants]
+# I2, bounded divergence. This is a dimension cap: max_tracks_per_phase = k
+# implies dim K <= k - 1, and it is what keeps a phase hand-checkable.
+max_tracks_per_phase = 4
+
+# I4, no absorbing states. Every gate must branch.
+min_viable_transitions = 2
+
+# I1, minimum entropy production. Generations without a change in homology
+# before the loop is declared stalled.
+stall_threshold = 2
+
+# Inflow-to-outflow ratio at which a pool is reported as unbounded. A pure
+# judgement call about when "more producers than consumers" becomes a defect
+# worth a line in a report.
+#
+# The engine cannot read this file: INV-1 forbids `pact-core` any I/O. So the
+# number is duplicated as `graph::PRESSURE_RATIO` and `scripts/canaries.sh`
+# checks the two agree. A constant duplicated across a boundary with no
+# detector is a constant that will drift.
+pressure_ratio = 3
+
+[derived]
+# 2^k - 1. The entire face capacity of one phase, and the quantity Theorem 1
+# (Import Necessity) bounds the loop's life by.
+max_faces_per_phase = 15

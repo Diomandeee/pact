@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PACT — the corpus, running</title>
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+
+<header>
+  <h1>PACT<span>.</span></h1>
+  <p class="meta" id="meta">reading&hellip;</p>
+  <div class="figures">
+    <figure><b id="n-starved">&mdash;</b><span>starved</span></figure>
+    <figure><b id="n-fired">&mdash;</b><span>fired</span></figure>
+    <figure><b id="n-held">&mdash;</b><span>held</span></figure>
+  </div>
+</header>
+
+<main><canvas id="c"></canvas></main>
+
+<ul class="legend">
+  <li><i class="k-source"></i>work enters</li>
+  <li><i class="k-pool"></i>turns over</li>
+  <li><i class="k-hot"></i>accumulating</li>
+  <li><i class="k-drain"></i>work stops</li>
+  <li><i class="k-dead"></i>can never fire</li>
+</ul>
+
+<footer>
+  <button id="play">play</button>
+  <button id="rewind">&#9664;&#9664;</button>
+  <input type="range" id="scrub" min="0" max="59" value="0">
+  <span class="step">step <b id="n-step">0</b></span>
+</footer>
+
+<noscript>
+  <p class="meta">This page runs the engine. Without JavaScript the endpoints
+  still answer: <code>/api/overview</code>, <code>/api/trace</code>,
+  <code>/api/graph</code>.</p>
+</noscript>
+
+<script type="module" src="/app/main.js"></script>
+</body>
+</html>

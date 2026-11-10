@@ -1,0 +1,16 @@
+[package]
+name = "pact-core"
+description = "The math of the rail-pulse loop: complexes, homology, invariants. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# HARD RULE (SPEC.md section 4): core has no dependencies beyond std and
+# touches no I/O. The math must be provable in isolation. Adding a dependency
+# here is a spec violation, not a convenience.
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""pulse — drive the living checklist to done, one gate at a time.
+
+THE PROBLEM
+
+The checklist knows what is next. The unlock map knows what that opens. The
+canaries know whether the tree is honest right now. Three sources, and a human
+holding them together by asking "continue" between every item.
+
+THE ANSWER
+
+One command that answers "what is next, what proves it, and what does passing
+it open", and one that answers "is the tree green right now". The loop between
+them is mechanical, so nobody has to re-derive it each morning.
+
+    pulse next        the next unticked item, its gate, what it unlocks
+    pulse remaining   every unticked item, in order
+    pulse board       ticked and unticked, with counts
+    pulse verify      canaries + lock check + tests, as one verdict
+    pulse ready       exit 0 if the tree is green and there is work left
+
+THE DISCIPLINE THIS DRIVES
+
+An item is ticked because its Gate command passed. Never because the work
+feels done. A gate that could not have failed is not a gate, and the way to
+know is to break the implementation on purpose and watch it fire -- in BOTH
+directions, because "rejects a mismatch" is satisfied by something that
+rejects everything.
+
+BLOCKED is not FAILED. If an item cannot proceed because its prerequisite does
+not exist, name the missing prerequisite and stop. Retrying cannot create a
+boundary, and substituting a stub to keep moving is the single most tempting
+move in a checklist-driven build.
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CHECKLIST = ROOT / ".governance/0.3_LIVING_CHECKLIST.md"
+MAP_PATH = ROOT / ".governance/0.4_UNLOCK_MAP.toml"
+
+ITEM = re.compile(r"^\s*- \[( |x)\]\s+\*\*(P[0-9.]+)\*\*\s*(.*)$", re.I)
+
+
+class Item:
+    def __init__(self, ident: str, done: bool, title: str) -> None:
+        self.id = ident
+        self.done = done
+        self.title = title.strip()
+        self.body: list[str] = []
+
+    @property
+    def gate(self) -> str:
+        """The Gate line and everything indented under it."""
+        out, capturing = [], False
+        for line in self.body:
+            stripped = line.strip()
+            if stripped.startswith("**Gate:**"):
+                capturing = True
+                out.append(stripped.removeprefix("**Gate:**").strip())
+            elif capturing:
+                # Design notes are parenthesised and italic; they are history,
+                # not instructions, so they stop the gate text.
+                if stripped.startswith("*("):
+                    break
+                out.append(stripped)
+        return " ".join(x for x in out if x)
+
+    def summary(self) -> str:
+        first = self.title
+        for line in self.body:
+            if not line.strip().startswith("**Gate:**"):
+                first += " " + line.strip()
+            else:
+                break
+        return " ".join(first.split())
+
+
+def read_items() -> list[Item]:
+    if not CHECKLIST.exists():
+        print(f"no checklist at {CHECKLIST}", file=sys.stderr)
+        raise SystemExit(2)
+    items: list[Item] = []
+    current: Item | None = None
+    for line in CHECKLIST.read_text(errors="ignore").splitlines():
+        m = ITEM.match(line)
+        if m:
+            current = Item(m.group(2), m.group(1).lower() == "x", m.group(3))
+            items.append(current)
+        elif current is not None:
+            if line.startswith("#") or (line.strip().startswith("- [") and "**P" not in line):
+                current = None
+            else:
+                current.body.append(line)
+    return items
+
+
+def unlocked_by(ident: str) -> list[dict]:
+    """Files whose last remaining gate is this one."""
+    if not MAP_PATH.exists():
+        return []
+    done = {i.id for i in read_items() if i.done}
+    entries = tomllib.loads(MAP_PATH.read_text()).get("file", [])
+    opening = []
+    for e in entries:
+        gates = e.get("unlocks_after", [])
+        if ident not in gates:
+            continue
+        # Everything else it waits on has already passed.
+        if all(g in done for g in gates if g != ident):
+            opening.append(e)
+    return opening
+
+
+def run(*cmd: str) -> tuple[int, str]:
+    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    return proc.returncode, (proc.stdout + proc.stderr)
+
+
+def cmd_next(_args) -> int:
+    items = read_items()
+    pending = [i for i in items if not i.done]
+    if not pending:
+        done = len(items)
+        print(f"nothing left — {done}/{done} ticked.")
+        print("The checklist is the plan; a finished plan is a finding, not a stop.")
+        return 0
+
+    item = pending[0]
+    ticked = sum(1 for i in items if i.done)
+    print(f"NEXT  {item.id}   ({ticked}/{len(items)} ticked, {len(pending)} left)\n")
+    print(f"  {item.summary()}\n")
+    if item.gate:
+        print("  GATE")
+        for chunk in wrap(item.gate, 70):
+            print(f"    {chunk}")
+        print()
+
+    opening = unlocked_by(item.id)
+    if opening:
+        print("  PASSING THIS OPENS")
+        for e in opening:
+            path = ROOT / e["path"]
+            state = "locked" if path.exists() and "PHASE-ZERO-LOCKED" in path.read_text(
+                errors="ignore"
+            )[:600] else "open"
+            print(f"    [{e.get('layer','?'):>2}] {e['path']}  ({state})")
+        print()
+
+    print("  THE LOOP")
+    for step in (
+        "1. ./scripts/pz open <path>   for each file this opens",
+        "2. build it, then write the gate test",
+        "3. make the gate multi-sided: a check that rejects everything",
+        "   passes a one-sided gate and is useless",
+        "4. PROVE IT FIRES. Break the implementation on purpose, both",
+        "   directions, and watch the count change",
+        "5. cargo fmt --all && ./scripts/canaries.sh && ./scripts/pz check",
+        "6. tick the item with evidence: command, count, date, and any",
+        "   defect the gate found on the way",
+        "7. commit with the four numbers, then ./scripts/pulse next",
+    ):
+        print(f"    {step}")
+    return 0
+
+
+def wrap(text: str, width: int) -> list[str]:
+    words, line, out = text.split(), "", []
+    for word in words:
+        if len(line) + len(word) + 1 > width:
+            out.append(line)
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    if line:
+        out.append(line)
+    return out
+
+
+def cmd_remaining(_args) -> int:
+    items = read_items()
+    pending = [i for i in items if not i.done]
+    print(f"{len(pending)} item(s) left of {len(items)}\n")
+    for item in pending:
+        print(f"  {item.id:<6} {item.summary()[:88]}")
+    return 0
+
+
+def cmd_board(_args) -> int:
+    items = read_items()
+    phase = None
+    for item in items:
+        head = item.id.split(".")[0]
+        if head != phase:
+            phase = head
+            print()
+        mark = "x" if item.done else " "
+        print(f"  [{mark}] {item.id:<6} {item.summary()[:80]}")
+    ticked = sum(1 for i in items if i.done)
+    print(f"\n  {ticked}/{len(items)} ticked")
+    return 0
+
+
+def cmd_verify(_args) -> int:
+    """One verdict over the three signals that must stay green."""
+    checks = [
+        ("canaries", ["./scripts/canaries.sh"]),
+        ("lock check", ["./scripts/pz", "check"]),
+        ("tests", ["cargo", "test", "--workspace", "--quiet"]),
+    ]
+    failed = 0
+    for name, cmd in checks:
+        code, out = run(*cmd)
+        if code == 0:
+            detail = ""
+            if name == "tests":
+                total = sum(
+                    int(m) for m in re.findall(r"(\d+) passed", out)
+                )
+                detail = f" — {total} passed"
+            elif name == "canaries":
+                m = re.search(r"(\d+) passed, (\d+) failed", out)
+                detail = f" — {m.group(0)}" if m else ""
+            print(f"  ok    {name}{detail}")
+        else:
+            print(f"  FAIL  {name}")
+            for line in out.strip().splitlines()[-12:]:
+                print(f"          {line}")
+            failed += 1
+    print()
+    if failed:
+        print(f"{failed} signal(s) red. A red signal left red is fine and expected.")
+        print("A red signal made green by weakening the check is the failure this")
+        print("whole structure exists to prevent.")
+    else:
+        print("green.")
+    return 1 if failed else 0
+
+
+def cmd_ready(_args) -> int:
+    """Exit 0 when the tree is green and there is work left to do."""
+    items = read_items()
+    pending = [i for i in items if not i.done]
+    if not pending:
+        print("no work left")
+        return 2
+    code, _ = run("./scripts/canaries.sh")
+    if code != 0:
+        print("canaries red — fix before taking the next item")
+        return 1
+    print(f"ready — {pending[0].id}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="command")
+    for name, fn in (
+        ("next", cmd_next),
+        ("remaining", cmd_remaining),
+        ("board", cmd_board),
+        ("verify", cmd_verify),
+        ("ready", cmd_ready),
+    ):
+        sub.add_parser(name).set_defaults(fn=fn)
+    args = parser.parse_args()
+    if not getattr(args, "fn", None):
+        return cmd_next(args)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

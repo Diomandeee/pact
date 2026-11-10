@@ -1,0 +1,46 @@
+[package]
+name = "pact-server"
+description = "The hosted surface. One corpus, over HTTP, with a page."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# INV-8: dependencies live at L4. This crate and pact-cli are the only two that
+# may take third-party crates; everything below depends on workspace members
+# and std. A canary checks it.
+# The binary is declared when P6.2 opens main.rs. Until then cargo would
+# auto-detect the locked file and try to compile a header as a program, which
+# is the lock mechanism colliding with a convention rather than a real problem.
+
+
+[[bin]]
+name = "pact-server"
+path = "src/main.rs"
+
+[lib]
+name = "pact_server"
+path = "src/lib.rs"
+
+[dependencies]
+pact-core = { path = "../pact-core" }
+pact-algebra = { path = "../pact-algebra" }
+pact-corpus = { path = "../pact-corpus" }
+pact-analysis = { path = "../pact-analysis" }
+pact-cli-tiers = { package = "pact-cli", path = "../pact-cli" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+# Generates the TypeScript from these exact structs. A DEV dependency: the
+# derive is cfg_attr(test, ...), so it never ships and the served binary
+# carries none of it. A hand-kept mirror of these types drifts the first week
+# nobody looks, and the drift is invisible until a panel renders blank.
+ts-rs = "11"
+
+[lints]
+workspace = true

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# P8.1's second half, against the live deployment.
+#
+#   the same skill, unchanged across ten snapshots, must produce ONE row
+#
+# Run against the real database rather than a mock, because what is being
+# tested is a property of the database — Convex has no unique constraint, so
+# the claim is entirely about whether the writer reads before it writes. A
+# mock of Convex would be a mock of the thing under test.
+#
+# Not a canary. It needs network, and a canary that can fail for being offline
+# stops meaning anything the day it fails for being offline.
+#
+# Usage:  ./scripts/gate_content_keyed
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+HASH="gate-$(git rev-parse --short HEAD)-unchanged-skill"
+OTHER="$HASH-changed"
+MODEL="gate-model"
+VERSION="v0"
+SNAPSHOTS=10
+
+# ── calling the backend, and counting what fails ──────────────────────────
+#
+# `call` assigns to OUT and increments ERRORS **in this shell**. It is invoked
+# as a plain command, never as `$(call ...)`: a command substitution is a
+# subshell, so a counter incremented inside one increments a copy and is lost.
+# The first version of this script did exactly that and printed `errors 0`
+# while eight calls were failing — a check that computed nothing.
+#
+# Swallowing the error rather than letting `set -e` end the run is the other
+# half. A writer that inserts blindly makes the next `.unique()` throw, so the
+# script would die mid-loop and report "something broke" instead of counting
+# rows and reporting that the property failed. Both were found by breaking the
+# mutation on purpose.
+OUT=""
+ERRORS=0
+call() {
+  if OUT=$(npx convex run "$1" "$2" 2>&1); then
+    return 0
+  fi
+  ERRORS=$((ERRORS + 1))
+  printf '%s\n' "$OUT" | tail -1 >&2
+  return 0
+}
+
+digits() { printf '%s' "$1" | tr -dc '0-9'; }
+
+echo "gate: content-keying"
+echo "  hash    $HASH"
+echo "  writes  $SNAPSHOTS"
+
+# Start clean, so the gate means the same thing on a second run. A gate that
+# only passes against an empty database is a gate that passes once.
+call readings:forget "{\"contentHash\":\"$HASH\"}"
+call readings:forget "{\"contentHash\":\"$OTHER\"}"
+
+created=0
+for i in $(seq 1 $SNAPSHOTS); do
+  # Everything that varies BETWEEN snapshots varies here: the timestamp moves
+  # and so does the summary. If either leaked into the key the count below
+  # would be 10. Replaying one byte-identical payload would pass even if the
+  # key were the entire row, which is why the payload changes.
+  call readings:record "{\"contentHash\":\"$HASH\",\"model\":\"$MODEL\",\"promptVersion\":\"$VERSION\",\"inputType\":\"Subject\",\"outputTypes\":[\"State\"],\"category\":\"Generator\",\"confidence\":0.9,\"summary\":\"snapshot $i of an unchanged skill\",\"at\":$((1000 + i))}"
+  case "$OUT" in
+    *'"created": true'* | *'"created":true'*) created=$((created + 1)) ;;
+  esac
+done
+
+call readings:countFor "{\"contentHash\":\"$HASH\",\"model\":\"$MODEL\"}"
+rows=$(digits "$OUT")
+
+# The negative half. Change the content and the SAME writer must create a
+# second row, or "one row" would also be satisfied by a writer that never
+# inserts anything and this gate would pass against a store that drops writes.
+call readings:record "{\"contentHash\":\"$OTHER\",\"model\":\"$MODEL\",\"promptVersion\":\"$VERSION\",\"inputType\":\"Subject\",\"outputTypes\":[\"State\"],\"category\":\"Generator\",\"confidence\":0.9,\"summary\":\"a different body\",\"at\":2000}"
+call readings:countFor "{\"contentHash\":\"$OTHER\",\"model\":\"$MODEL\"}"
+other=$(digits "$OUT")
+
+echo "  created $created  (expected 1)"
+echo "  rows    ${rows:-?}  (expected 1)"
+echo "  changed ${other:-?}  (expected 1, its own row)"
+echo "  errors  $ERRORS  (expected 0)"
+
+fail=0
+[ "$ERRORS" = "0" ] || { echo "FAIL: $ERRORS call(s) errored — a duplicate row makes .unique() throw"; fail=1; }
+[ "${rows:-}" = "1" ] || { echo "FAIL: $SNAPSHOTS snapshots left ${rows:-no} rows, so readings are keyed by time"; fail=1; }
+[ "$created" = "1" ] || { echo "FAIL: reported $created creations, so the cache cannot count its own hits"; fail=1; }
+[ "${other:-}" = "1" ] || { echo "FAIL: changed content produced ${other:-no} rows, so the store is not writing at all"; fail=1; }
+
+call readings:forget "{\"contentHash\":\"$HASH\"}"
+call readings:forget "{\"contentHash\":\"$OTHER\"}"
+
+if [ "$fail" = "0" ]; then echo "PASS"; else exit 1; fi

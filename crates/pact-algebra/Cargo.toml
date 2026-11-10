@@ -1,0 +1,17 @@
+[package]
+name = "pact-algebra"
+description = "The six combinators. Words in this algebra compose engine graphs; protocols are predicates over them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# L1 depends on L0 and on nothing else. The layer rule points one way, and a
+# dependency added here that is not `pact-core` is a layering violation rather
+# than a convenience.
+[dependencies]
+pact-core = { path = "../pact-core" }
+
+[lints]
+workspace = true

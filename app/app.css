@@ -1,0 +1,77 @@
+/* PACT — the instrument.
+ *
+ * One dominant colour and one alarm. Orange is pressure and nothing else: a
+ * canvas where several things are always coloured has no way left to alarm.
+ *
+ * Everything carrying a diagnosis carries it in SHAPE as well, because the
+ * argument of this whole tool is that structure is legible. */
+
+:root {
+  --paper:#0b0c10; --ink:#ece7dc; --dim:#7b7568; --rule:#242731;
+  --hot:#f97316; --live:#4cc9d9; --drain:#8b5cf6; --source:#a3e635;
+  --dead:#4a4d58;
+  --mono: ui-monospace,"SF Mono",Menlo,monospace;
+  --face: "Iowan Old Style", Palatino, Georgia, serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);font-family:var(--face);
+  overflow:hidden;display:grid;grid-template-rows:auto 1fr auto auto;
+  background-image:
+    radial-gradient(900px 500px at 8% -10%, #4cc9d914, transparent 70%),
+    radial-gradient(700px 400px at 96% -6%, #f9731610, transparent 70%);
+}
+
+header{
+  padding:1.3rem 1.8rem .9rem;border-bottom:1px solid var(--rule);
+  display:grid;grid-template-columns:auto 1fr auto;align-items:end;gap:1.6rem;
+}
+h1{margin:0;font-size:1.7rem;font-weight:400;letter-spacing:-.03em;line-height:1}
+h1 span{color:var(--hot)}
+.meta{margin:0;font-family:var(--mono);font-size:.72rem;color:var(--dim);letter-spacing:.05em}
+
+/* The starvation figure is first-class. It is the most striking fact about
+   this corpus and the prototype buried it in eleven-pixel grey at the bottom. */
+.figures{display:flex;gap:1.8rem}
+figure{margin:0;display:flex;flex-direction:column;align-items:flex-end;gap:.1rem}
+figure b{font-size:1.6rem;font-weight:400;line-height:1;font-variant-numeric:tabular-nums}
+figure span{font-size:.64rem;font-family:var(--mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+figure:first-child b{color:var(--hot)}
+
+main{position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+
+.legend{
+  list-style:none;margin:0;padding:.7rem 1.8rem;display:flex;gap:1.5rem;
+  flex-wrap:wrap;border-top:1px solid var(--rule);
+  font-family:var(--mono);font-size:.68rem;color:var(--dim);
+}
+.legend li{display:flex;align-items:center;gap:.45rem}
+.legend i{width:.85rem;height:.85rem;display:inline-block;border-radius:999px;border:1.5px solid}
+.k-source{border-color:var(--source)}
+.k-pool{border-color:var(--live)}
+.k-hot{border-color:var(--hot);border-width:2.5px}
+.k-drain{border-color:var(--drain)}
+.k-dead{border-color:var(--dead);border-style:dashed;border-radius:0}
+
+footer{
+  padding:.85rem 1.8rem;border-top:1px solid var(--rule);
+  display:flex;align-items:center;gap:1.1rem;
+}
+button{
+  appearance:none;background:none;border:1px solid var(--rule);color:var(--ink);
+  font:inherit;font-family:var(--mono);font-size:.78rem;padding:.35rem .9rem;
+  cursor:pointer;transition:border-color .15s,color .15s;min-width:5rem;
+}
+button:hover{border-color:var(--live);color:var(--live)}
+input[type=range]{flex:1;accent-color:var(--hot)}
+.step{font-family:var(--mono);font-size:.78rem;color:var(--dim);min-width:6rem}
+.step b{color:var(--ink);font-weight:400;font-variant-numeric:tabular-nums}
+code{font-family:var(--mono)}
+
+@media (max-width:720px){
+  header{grid-template-columns:1fr;gap:.8rem}
+  .figures{justify-content:flex-start}
+  figure{align-items:flex-start}
+}

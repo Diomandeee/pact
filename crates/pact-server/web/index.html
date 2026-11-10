@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PACT</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header>
+  <h1>PACT<span class="dot">.</span></h1>
+  <p class="sub">A corpus of prompts, read as an economy.</p>
+  <p class="root" id="root">{{root}}</p>
+</header>
+
+<nav>
+  <button data-view="health" class="on">Health</button>
+  <button data-view="chains">Chains</button>
+  <button data-view="flow">Flow</button>
+  <button data-view="cost">Cost</button>
+</nav>
+
+<main>
+
+<section id="health" class="view on">
+  <div class="figures">
+    <figure><b id="n-skills">{{skills}}</b><span>skills</span></figure>
+    <figure><b id="n-types">{{types}}</b><span>types</span></figure>
+    <figure><b id="n-loops">{{loops}}</b><span>feedback loops</span></figure>
+    <figure id="dead-fig"><b id="n-dead">{{dead}}</b><span>can never fire</span></figure>
+  </div>
+  <p class="verdict" id="verdict">{{verdict}}</p>
+
+  <div class="cols">
+    <div>
+      <h2>Under pressure</h2>
+      <p class="note">More producers than consumers. Above one it accumulates,
+      around one it turns over.</p>
+      <table id="pressure"><tbody></tbody></table>
+    </div>
+    <div>
+      <h2>Where work enters</h2>
+      <p class="note">Nothing produces these. They are what a person brings.</p>
+      <ul id="sources"></ul>
+      <h2>Where work stops</h2>
+      <p class="note">Nothing consumes these. Work arrives and cannot continue.</p>
+      <ul id="deadends"></ul>
+    </div>
+  </div>
+</section>
+
+<section id="chains" class="view">
+  <h2>Every chain, factored</h2>
+  <p class="note">The canonical cycle is
+  <code>&#8634;(&#8855; &#9656; * &#9656; &#8853;)</code> &mdash; expand,
+  execute, select, repeat. A chain missing a stage is degenerate, not broken,
+  and which one it is missing is the finding.</p>
+  <table id="chain-table">
+    <thead><tr><th></th><th>chain</th><th>word</th><th>missing</th><th>types</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <h2>Short across the corpus</h2>
+  <p class="note">The number that names a missing generator rather than the
+  chains that suffer from it.</p>
+  <table id="short"><tbody></tbody></table>
+</section>
+
+<section id="flow" class="view">
+  <h2>Type flow</h2>
+  <p class="note">Types are nodes, skills are the arrows between them. Shape
+  carries the diagnosis.</p>
+  <ul class="legend">
+    <li><i class="k-source"></i>work enters</li>
+    <li><i class="k-drain"></i>work stops</li>
+    <li><i class="k-hot"></i>under pressure</li>
+    <li><i class="k-pool"></i>turns over</li>
+  </ul>
+  <div id="graph"></div>
+</section>
+
+<section id="cost" class="view">
+  <h2>What needed a model</h2>
+  <p class="note">Most questions about a corpus are structural and should never
+  cost a call. A number that drifts downward is the tier collapsing.</p>
+  <div class="figures">
+    <figure class="wide"><b id="n-share">{{share}}</b><span>answered from structure alone</span></figure>
+    <figure><b id="n-engine">&mdash;</b><span>engine</span></figure>
+    <figure><b id="n-model">&mdash;</b><span>model</span></figure>
+    <figure><b id="n-agent">&mdash;</b><span>agent</span></figure>
+  </div>
+  <h2>Why anything left</h2>
+  <table id="reasons"><tbody></tbody></table>
+</section>
+
+</main>
+
+<aside id="detail" hidden>
+  <button id="close">&times;</button>
+  <div id="detail-body"></div>
+</aside>
+
+<noscript>
+  <p class="note">This page fetches its numbers. Without JavaScript the
+  endpoints still answer: <code>/api/overview</code>,
+  <code>/api/chains</code>, <code>/api/graph</code>,
+  <code>/api/tiers</code>.</p>
+</noscript>
+
+<script src="/app.js"></script>
+</body>
+</html>

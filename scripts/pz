@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""pz — the unlock map. See the whole project, work only where you are.
+
+THE PROBLEM
+
+Scaffolding a project either generates nothing (and the shape is lost, and
+everyone rediscovers it) or generates everything (and half the tree is
+irrelevant to where the work is, and nothing stops someone building L4 on an
+unproven L0).
+
+THE ANSWER
+
+Generate the whole map and lock most of it. A locked file exists, carries a
+header saying it is locked and what opens it, and is refused by `pz check`
+if edited. Video-game logic: the mission is on the map, greyed out, with the
+prerequisite named. Not hidden, not open.
+
+A LOCKED FILE IS NOT A STUB
+
+This distinction is the design, and collapsing it would make the whole thing
+worse than nothing:
+
+  a stub        claims to work, turns a red gate green, hides uncertainty
+  a locked file declares it is closed, keeps the gate red, states the reason
+
+The stub canary must therefore recognise the lock header and permit it, while
+still failing on anything that silently pretends to be implementation.
+
+    pz status          what is open, what is next, what is far and why
+    pz check           nothing was edited while locked
+    pz open <id>       unlock a file whose gates have passed
+    pz scaffold        create every locked file the map declares
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+MAP_PATH = Path(".governance/0.4_UNLOCK_MAP.toml")
+CHECKLIST = Path(".governance/0.3_LIVING_CHECKLIST.md")
+
+LOCK_MARK = "PHASE-ZERO-LOCKED"
+
+# Doc-comment form where the language has one. A locked Rust file is still
+# compiled, and a plain `//` header leaves the crate undocumented, so a strict
+# `missing_docs` wall fails on the lock itself rather than on anything anyone
+# wrote. `//!` makes the header the documentation, which is what it is.
+COMMENT = {
+    ".rs": "//!", ".py": "#", ".sh": "#", ".toml": "#", ".ts": "//",
+    ".js": "//", ".swift": "//", ".go": "//", ".md": "<!--",
+}
+
+
+def passed_gates() -> set[str]:
+    """Checklist items that are ticked. The source of unlock authority.
+
+    Deliberately reads the checklist rather than a separate state file: two
+    sources of truth about progress is how a project ends up with a green
+    dashboard and a red repository.
+    """
+    if not CHECKLIST.exists():
+        return set()
+    done = set()
+    for line in CHECKLIST.read_text(errors="ignore").splitlines():
+        if re.match(r"^\s*- \[x\]", line, re.I):
+            m = re.search(r"\*\*(P[0-9.]+)\*\*", line)
+            if m:
+                done.add(m.group(1))
+    return done
+
+
+def load_map() -> list[dict]:
+    if not MAP_PATH.exists():
+        print(f"no unlock map at {MAP_PATH}", file=sys.stderr)
+        raise SystemExit(2)
+    data = tomllib.loads(MAP_PATH.read_text())
+    return data.get("file", [])
+
+
+def lock_header(entry: dict, ext: str) -> str:
+    c = COMMENT.get(ext, "#")
+    close = " -->" if c == "<!--" else ""
+    gates = ", ".join(entry.get("unlocks_after", [])) or "nothing"
+    why = " ".join(entry.get("why", "").split())
+    lines = [
+        f"{c} {LOCK_MARK}{close}",
+        f"{c} This file is on the map and is not open yet.{close}",
+        f"{c} Opens after: {gates}{close}",
+        f"{c} Why that order: {why}{close}",
+        f"{c}{close}",
+        f"{c} Do not implement here. Building on an unproven layer means every{close}",
+        f"{c} result above it inherits an assumption nobody checked.{close}",
+        f"{c} When the gates pass:  ./scripts/pz open {entry['path']}{close}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def is_locked(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        head = path.read_text(errors="ignore")[:600]
+    except OSError:
+        return False
+    return LOCK_MARK in head
+
+
+def status(entries: list[dict]) -> int:
+    done = passed_gates()
+    open_now, next_up, far = [], [], []
+    for e in entries:
+        gates = e.get("unlocks_after", [])
+        missing = [g for g in gates if g not in done]
+        if not missing:
+            open_now.append(e)
+        elif len(missing) <= 1:
+            next_up.append((e, missing))
+        else:
+            far.append((e, missing))
+
+    print(f"gates passed: {', '.join(sorted(done)) if done else 'none'}\n")
+    print(f"OPEN ({len(open_now)})")
+    for e in open_now:
+        built = "built" if Path(e["path"]).exists() and not is_locked(Path(e["path"])) else "empty"
+        print(f"   [{e.get('layer','?'):>2}] {e['path']}  ({built})")
+    print(f"\nNEXT ({len(next_up)}) — one gate away")
+    for e, missing in next_up:
+        print(f"   [{e.get('layer','?'):>2}] {e['path']}  needs {missing[0]}")
+    print(f"\nLOCKED ({len(far)})")
+    for e, missing in far:
+        print(f"   [{e.get('layer','?'):>2}] {e['path']}  needs {', '.join(missing)}")
+    return 0
+
+
+def scaffold(entries: list[dict]) -> int:
+    created = 0
+    for e in entries:
+        path = Path(e["path"])
+        if path.exists():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(lock_header(e, path.suffix))
+        created += 1
+    print(f"created {created} locked file(s); {len(entries) - created} already present")
+    return 0
+
+
+def check(entries: list[dict]) -> int:
+    """Was anything edited while locked?
+
+    Compares the map against git. A locked file that has content beyond its
+    header is the failure this command exists to catch, and it is a hard fail
+    rather than a warning because the whole mechanism collapses the first time
+    it is treated as advisory.
+    """
+    done = passed_gates()
+    violations = []
+    for e in entries:
+        path = Path(e["path"])
+        gates = e.get("unlocks_after", [])
+        missing = [g for g in gates if g not in done]
+        if not missing or not path.exists():
+            continue
+        body = path.read_text(errors="ignore")
+        if LOCK_MARK not in body:
+            violations.append((e, "lock header removed"))
+            continue
+        substantive = [
+            ln for ln in body.splitlines()
+            if ln.strip() and LOCK_MARK not in ln
+            and not ln.lstrip().startswith(("//", "#", "<!--"))
+        ]
+        if substantive:
+            violations.append((e, f"{len(substantive)} line(s) of content while locked"))
+
+    if not violations:
+        print(f"ok — {len(entries)} mapped file(s), none edited while locked")
+        return 0
+    print(f"FAIL — {len(violations)} file(s) worked on ahead of their gates\n")
+    for e, why in violations:
+        gates = ", ".join(e.get("unlocks_after", []))
+        print(f"   {e['path']}\n      {why}\n      still needs: {gates}")
+    return 1
+
+
+def open_file(entries: list[dict], target: str) -> int:
+    done = passed_gates()
+    for e in entries:
+        if e["path"] != target:
+            continue
+        missing = [g for g in e.get("unlocks_after", []) if g not in done]
+        if missing:
+            print(f"refused — {target} still needs {', '.join(missing)}")
+            print("Tick those in the living checklist first, and tick them")
+            print("because their Gates passed, not because the work feels done.")
+            return 1
+        path = Path(target)
+        if path.exists() and is_locked(path):
+            # Truncate rather than filter. A locked file contains the header
+            # and nothing else -- that is what `check` enforces -- so opening
+            # it means emptying it. The first version filtered three specific
+            # header lines and left the rest, so every opened file began with
+            # an orphaned "Why that order:" and an instruction to run the
+            # command that had just been run.
+            path.write_text("")
+        print(f"opened {target}")
+        return 0
+    print(f"{target} is not in the map")
+    return 2
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("command", choices=["status", "scaffold", "check", "open"])
+    parser.add_argument("target", nargs="?")
+    args = parser.parse_args()
+    entries = load_map()
+    if args.command == "status":
+        return status(entries)
+    if args.command == "scaffold":
+        return scaffold(entries)
+    if args.command == "check":
+        return check(entries)
+    if not args.target:
+        print("open needs a path", file=sys.stderr)
+        return 2
+    return open_file(entries, args.target)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

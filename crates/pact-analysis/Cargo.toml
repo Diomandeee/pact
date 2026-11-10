@@ -1,0 +1,19 @@
+[package]
+name = "pact-analysis"
+description = "Statics, dynamics, structure and persistence over an imported corpus."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# L2 sits above L3 deliberately. Analysis with no real corpus produces
+# beautiful metrics over synthetic graphs and never meets a fact that can
+# contradict it.
+[dependencies]
+pact-core = { path = "../pact-core" }
+pact-algebra = { path = "../pact-algebra" }
+pact-corpus = { path = "../pact-corpus" }
+
+[lints]
+workspace = true

@@ -1,0 +1,596 @@
+# UNLOCK MAP
+#
+# Every file PACT is expected to contain, and what must be true before it
+# opens. The whole map is visible; most of it is locked.
+#
+# A locked file is NOT a stub. A stub claims to work and turns a red gate
+# green. A locked file declares it is closed, keeps the gate red, and states
+# the reason. That distinction is the entire mechanism.
+#
+#   ./scripts/pz status     what is open, what is next, what is far and why
+#   ./scripts/pz scaffold   create every locked file
+#   ./scripts/pz check      nothing was edited while locked
+#   ./scripts/pz open <p>   unlock a file whose gates have passed
+#
+# Gate ids refer to .governance/0.3_LIVING_CHECKLIST.md. Unlocking happens by
+# ticking a gate there, and a gate is ticked because its command passed.
+
+# ─────────────────────────────────────────────── L0  the engine
+
+[[file]]
+path = "crates/pact-core/src/token.rs"
+layer = "L0"
+unlocks_after = []
+why = "Typed resources are the ground. Nothing above can be built without them."
+
+[[file]]
+path = "crates/pact-core/tests/token.rs"
+layer = "L0"
+unlocks_after = []
+why = "The P1.1 gate itself. A gate's own test opens with the file it tests, never with the gate it proves: the second is circular, and the first three test files were left off this map because the distinction had not been thought through."
+
+[[file]]
+path = "crates/pact-core/src/node.rs"
+layer = "L0"
+unlocks_after = ["P1.1"]
+why = "A node holds and moves bags. Defining one before the bag arithmetic is proven means the node's semantics rest on unverified accounting."
+
+[[file]]
+path = "crates/pact-core/tests/vocabulary.rs"
+layer = "L0"
+unlocks_after = ["P1.1"]
+why = "The P1.2 gate. Opens with node.rs and edge.rs, the files it characterises."
+
+[[file]]
+path = "crates/pact-core/src/edge.rs"
+layer = "L0"
+unlocks_after = ["P1.1"]
+why = "Edges carry rates over typed bags."
+
+[[file]]
+path = "crates/pact-core/src/graph.rs"
+layer = "L0"
+unlocks_after = ["P1.2"]
+why = "Structural defects are defined against the node vocabulary. Writing the detector before the vocabulary settles produces detectors for shapes that stop existing."
+
+[[file]]
+path = "crates/pact-core/tests/defects.rs"
+layer = "L0"
+unlocks_after = ["P1.2"]
+why = "The P1.3 gate. Opens with graph.rs, the file it tests."
+
+[[file]]
+path = "crates/pact-core/src/interpret.rs"
+layer = "L0"
+unlocks_after = ["P1.3"]
+why = "The interpreter trait is the seam between simulation and execution. It must be designed against a graph whose defects are already characterised, or the seam gets drawn in the wrong place."
+
+[[file]]
+path = "crates/pact-core/tests/seam.rs"
+layer = "L0"
+unlocks_after = ["P1.3"]
+why = "The P1.4 gate. Opens with interpret.rs: half of it greps the trait's own signatures, and half tests the scheduling rules, which are pure and therefore testable before any backend exists."
+
+[[file]]
+path = "crates/pact-core/src/sim.rs"
+layer = "L0"
+unlocks_after = ["P1.4"]
+why = "The simulator is one implementation of the trait. Writing it first is how the trait ends up shaped like the simulator and useless for the executor."
+
+[[file]]
+path = "crates/pact-core/tests/simulate.rs"
+layer = "L0"
+unlocks_after = ["P1.4"]
+why = "The P1.5 gate. Opens with sim.rs. Running the second implementation against the scheduler is what found four defects the first one had already shipped green."
+
+[[file]]
+path = "crates/pact-core/tests/common/mod.rs"
+layer = "L0"
+unlocks_after = ["P1.5"]
+why = "The seeded graph generator both property gates share. It is on the map because it decides which graphs conservation is ever checked against, which makes it part of the argument rather than scaffolding around it."
+
+[[file]]
+path = "crates/pact-core/tests/conservation.rs"
+layer = "L0"
+unlocks_after = ["P1.5"]
+why = "INV-2. Property tests over generated graphs, per type. This is the gate that makes every economy number downstream mean anything."
+
+[[file]]
+path = "crates/pact-core/tests/reproducibility.rs"
+layer = "L0"
+unlocks_after = ["P1.5"]
+why = "INV-3. Same seed, same trace, byte for byte."
+
+# ─────────────────────────────────────────────── L1  the algebra
+
+[[file]]
+path = "crates/pact-core/src/lib.rs"
+layer = "L0"
+unlocks_after = []
+why = "The crate root. Its module list is what tracks this map, so it is edited every time a file here opens rather than being gated itself."
+
+[[file]]
+path = "crates/pact-algebra/src/lib.rs"
+layer = "L1"
+unlocks_after = ["P1.6", "P1.7"]
+why = "The algebra crate root. Opens with the first module it declares."
+
+[[file]]
+path = "crates/pact-algebra/tests/combinators.rs"
+layer = "L1"
+unlocks_after = ["P1.6", "P1.7"]
+why = "The P2.1 gate. Opens with combinator.rs, the file it tests."
+
+[[file]]
+path = "crates/pact-algebra/src/combinator.rs"
+layer = "L1"
+unlocks_after = ["P1.6", "P1.7"]
+why = "The algebra composes graphs. Composing over an engine whose conservation and reproducibility are unproven means every composition inherits an assumption nobody checked."
+
+[[file]]
+path = "crates/pact-algebra/src/protocol.rs"
+layer = "L1"
+unlocks_after = ["P2.1"]
+why = "A protocol is a predicate over composed graphs. It needs the combinators to predicate about."
+
+[[file]]
+path = "crates/pact-algebra/tests/protocols.rs"
+layer = "L1"
+unlocks_after = ["P2.1"]
+why = "The P2.2 gate. Opens with protocol.rs. The protocols it checks are declared in the test out of the Rule vocabulary, exactly as a user would declare theirs, which is also what keeps a named railpulse out of the algebra crate."
+
+[[file]]
+path = "crates/pact-algebra/src/word.rs"
+layer = "L1"
+unlocks_after = ["P2.1"]
+why = "A word is a sequence of combinators. Parsing and printing them is meaningless until they exist."
+
+[[file]]
+path = "crates/pact-algebra/tests/witness.rs"
+layer = "L1"
+unlocks_after = ["P2.2"]
+why = "INV-4, the property that keeps generation honest. Renamed from generator_satisfies_validator.rs: the file is about the witness `emit` produces, and the property is one of several things it checks rather than the whole subject."
+
+[[file]]
+path = "crates/pact-algebra/tests/railpulse.rs"
+layer = "L1"
+unlocks_after = ["P2.3"]
+why = "The P2.4 gate. It pulls protocols/railpulse.rs in by path rather than depending on it, which is what keeps the protocol out of every shipped crate while still being tested."
+
+[[file]]
+path = "protocols/railpulse.rs"
+layer = "L1"
+unlocks_after = ["P2.3"]
+why = "railpulse is a word in the algebra. It lives outside the engine on purpose (INV-7): a protocol baked into the core is privileged over every other one the platform is supposed to host."
+
+# ─────────────────────────────────────────────── L3  corpus import
+
+[[file]]
+path = "crates/pact-corpus/src/soop.rs"
+layer = "L3"
+unlocks_after = ["P2.4"]
+why = "Parsing SOOP-2 frontmatter into a graph. Import comes before analysis deliberately: analysis with no real corpus produces beautiful metrics over synthetic graphs and never meets a fact that can contradict it."
+
+[[file]]
+path = "crates/pact-corpus/src/lib.rs"
+layer = "L3"
+unlocks_after = ["P2.4"]
+why = "The corpus crate root. Opens with the first module it declares."
+
+[[file]]
+path = "crates/pact-corpus/tests/soop.rs"
+layer = "L3"
+unlocks_after = ["P2.4"]
+why = "The P3.1 gate. Opens with soop.rs. It runs prompt_algebra.py and diffs against it live rather than against numbers typed into the test, because the corpus changes every time a skill is written."
+
+[[file]]
+path = "crates/pact-corpus/src/chains.rs"
+layer = "L3"
+unlocks_after = ["P3.1"]
+why = "Chains are words over imported skills. The skills must import first."
+
+[[file]]
+path = "crates/pact-corpus/tests/matches_python.rs"
+layer = "L3"
+unlocks_after = ["P3.1"]
+why = "The P3.2 gate, the differential test against decompose.py. Opens with chains.rs, the file it tests, never with the gate it proves: the map said P3.2 and that was circular, the same defect P1.2 had."
+
+[[file]]
+path = "crates/pact-corpus/tests/declared.rs"
+layer = "L3"
+unlocks_after = ["P3.1"]
+why = "The P3.4 gate: declared members, declared shape, declared iteration, refinement — each both directions. Opens with chains.rs, the file it tests."
+
+[[file]]
+path = "crates/pact-corpus/tests/roundtrip.rs"
+layer = "L3"
+unlocks_after = ["P3.2"]
+why = "The P3.3 gate. Opens with chains.rs's rebuild half, which is the half that turns a factoring back into something the algebra holds."
+
+# ─────────────────────────────────────────────── L2  analysis
+
+[[file]]
+path = "crates/pact-analysis/src/statics.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "Composability and dead ends over a real imported corpus."
+
+[[file]]
+path = "crates/pact-analysis/src/dynamics.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "Pressure, starvation, feedback loops. Needs both a real corpus and a proven simulator."
+
+[[file]]
+path = "crates/pact-analysis/src/lib.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The analysis crate root. Opens with the first modules it declares."
+
+[[file]]
+path = "crates/pact-analysis/tests/matches_python.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P4.1 and P4.2 gates. Both in one file because they read one corpus and diff against two oracles written against the same data; split, they could each agree with their own oracle and not with each other."
+
+[[file]]
+path = "crates/pact-analysis/src/homology.rs"
+layer = "L2"
+unlocks_after = ["P4.1"]
+why = "b0 and b1 over GF(2). Gated on nine known-answer complexes, which is the only reason to trust a number nobody can check by eye."
+
+[[file]]
+path = "crates/pact-analysis/tests/homology.rs"
+layer = "L2"
+unlocks_after = ["P4.1"]
+why = "The P4.3 gate. Opens with homology.rs. Nine complexes small enough to check by hand, each also diffed against loop_harness.py: matching what a person can verify and matching the implementation already verified are different claims."
+
+[[file]]
+path = "crates/pact-analysis/src/persistence.rs"
+layer = "L2"
+unlocks_after = ["P4.3"]
+why = "The barcode. Requires homology to persist, and the simplicial-map admission check to keep fabricated faces out at the door rather than in the report."
+
+[[file]]
+path = "crates/pact-analysis/tests/persistence.rs"
+layer = "L2"
+unlocks_after = ["P4.3"]
+why = "The P4.4 gate. Opens with persistence.rs. Its subject is the door rather than the report: a fabrication flagged after admission has already entered the barcode."
+
+[[file]]
+path = "crates/pact-analysis/tests/theorem_one.rs"
+layer = "L2"
+unlocks_after = ["P4.3"]
+why = "The P4.5 gate. The one item that can falsify the spec: it runs loops with injection off and checks they halt at or below 2^k-1. A run that never halted would be recorded, not adjusted away."
+
+[[file]]
+path = "crates/pact-analysis/src/stuck.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The two-reject trigger over a real vendored corpus. Opens with the corpus discipline, not with any P9 gate: the 81% curve was measured outside this tree and the fixture carries it in."
+
+[[file]]
+path = "crates/pact-analysis/tests/stuck_matches_oracle.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.1 gate. Opens with stuck.rs, the file it tests, never with the gate it proves. Diffs every fire index against the vendored oracle over all 218 fixture sessions."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/trajectory-moves.json"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The corpus the P9.1 gate reads: 218 sessions, 7,303 classified turns, moves only. Vendored so the gate survives the prototype directory being wiped."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/stuck_oracle.py"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.1 oracle. Vendored next to the fixture rather than living with the skills-dir oracles, so fixture, oracle and gate travel together; the deviation is deliberate and recorded here."
+
+[[file]]
+path = "crates/pact-analysis/src/repertoire.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The 8-class closed vocabulary over the same vendored-label discipline as the trigger. Opens with the corpus, not with any P9 gate: the classes were labelled outside this tree."
+
+[[file]]
+path = "crates/pact-analysis/tests/repertoire_matches_oracle.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.2 gate. Opens with repertoire.rs. Two diffs in one file — Rust against baked answers, baked answers against an independent derivation — because a transcription slip and a wrong formula fail differently and one diff alone leaves the other half unverified."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/repertoire-fixture.json"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The corpus the P9.2 gate reads: 170 human-labelled turns, raw fields plus baked class, all 8 classes present. Vendored for the same reason as the moves fixture."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/repertoire_oracle.py"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.2 oracle. Derives each row's class from raw fields only, never from the baked answer — the derivation the transcription diff checks against."
+
+[[file]]
+path = "crates/pact-analysis/tests/live_gate_ab.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.3 gate. Runs the harness smoke only — scoring math, both winner directions, tiebreak. The scored round needs the prototype corpus and (once) the embedding endpoint, neither of which belongs in a test."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/live_gate_ab.py"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.3 harness: two triggers, frozen items, pre-declared win condition. Smoke mode is self-contained; embed/offline modes read the prototype paths by design, so a moved corpus fails loudly instead of scoring a different one."
+
+[[file]]
+path = "crates/pact-analysis/tests/fixtures/live_gate_ab.md"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.3 protocol both arms run under: arms, frozen items, metric, 5pp win margin with the tiebreak to the API-free arm declared before the first run. The spec, not the harness, is what makes the round pre-registered."
+
+[[file]]
+path = "crates/pact-cli/tests/stuck_cli.rs"
+layer = "L4"
+unlocks_after = ["P3.3"]
+why = "The P9.4 gate. Scripted per-session fires plus the full fixture replayed through the binary against stuck_oracle.py: a CLI printing different fires than its crate would be the one failure the lower gates cannot see."
+
+[[file]]
+path = "crates/pact-analysis/src/policy.rs"
+layer = "L2"
+unlocks_after = ["P3.3"]
+why = "The P9.5 parametric policy: measured unblock rates as selection weights. Opens with the corpus discipline — every weight is a findings-0003 fraction with its n, and the pin test fails until findings and code change together."
+
+[[file]]
+path = "scripts/watch-stuck"
+layer = "L4"
+unlocks_after = ["P3.3"]
+why = "The P9.4 sweep: classify new prompt-log turns, decide through the pact binary (never a reimplementation), append fire records to var/. Read-only on the session store; the adoption log it grows is the P9.3 live follow-up."
+
+# ─────────────────────────────────────────────── L4  surface
+
+[[file]]
+path = "crates/pact-cli/src/main.rs"
+layer = "L4"
+unlocks_after = ["P4.4"]
+why = "The surface is last. A CLI over an unproven analysis is a fast way to publish wrong numbers."
+
+[[file]]
+path = "crates/pact-cli/tests/surface.rs"
+layer = "L4"
+unlocks_after = ["P4.4"]
+why = "The P5.1 gate. Opens with main.rs. It diffs the CLI against the layers it is a surface over, which are themselves already diffed against the Python."
+
+[[file]]
+path = "crates/pact-cli/src/export.rs"
+layer = "L4"
+unlocks_after = ["P5.1"]
+why = "Diagram export. Shareable output should only exist once the thing being shared is checked."
+
+[[file]]
+path = "crates/pact-cli/tests/export.rs"
+layer = "L4"
+unlocks_after = ["P5.1"]
+why = "The P5.2 gate. Opens with export.rs. Its subject is that the shapes carry the diagnosis, not that the output parses."
+
+[[file]]
+path = "crates/pact-cli/src/tiers.rs"
+layer = "L4"
+unlocks_after = ["P5.2"]
+why = "P5.3, tiered evaluation. The surface is where escalation belongs: the engine answers what it can, and anything reaching a model does so with a reason recorded."
+
+[[file]]
+path = "crates/pact-cli/tests/tiers.rs"
+layer = "L4"
+unlocks_after = ["P5.2"]
+why = "The P5.3 gate. Measures the share of checks the engine answered alone, because an evaluator that silently calls a model for everything is the failure this tier exists to prevent."
+
+# ─────────────────────────────────────────────── L4  the hosted surface
+
+[[file]]
+path = "crates/pact-server/src/view.rs"
+layer = "L4"
+unlocks_after = ["P5.1"]
+why = "The wire shape. Separate from the analysis types because what a UI wants is flattened, sorted and pre-joined, and because serde derives on Statics and Factoring would spread a dependency across three layers to serve one."
+
+[[file]]
+path = "crates/pact-server/tests/agrees_with_cli.rs"
+layer = "L4"
+unlocks_after = ["P5.1"]
+why = "The P6.1 gate. Opens with view.rs. If the page and `pact check` ever disagree, the surface is lying about a computation that is itself correct, and nothing in the 178 existing tests would see it."
+
+[[file]]
+path = "crates/pact-server/src/api.rs"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "Handlers over the view types. Routing before there is anything to serialise produces endpoints shaped like the framework rather than like the analysis."
+
+[[file]]
+path = "crates/pact-server/src/main.rs"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "Binding, routing and static serving."
+
+[[file]]
+path = "crates/pact-server/tests/endpoints.rs"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "The P6.2 gate. Opens with api.rs."
+
+[[file]]
+path = "crates/pact-server/web/index.html"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "The page. Opens with main.rs, which embeds it via include_str! and cannot compile without it — the map said P6.2 and that was circular, the third time this class has appeared after P1.2 and P3.2. P6.3 gates its CONTENT, not its existence."
+
+[[file]]
+path = "crates/pact-server/web/app.css"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "Hand-written, no build step, embedded in the binary. Opens with main.rs for the same reason as index.html."
+
+[[file]]
+path = "crates/pact-server/web/app.js"
+layer = "L4"
+unlocks_after = ["P6.1"]
+why = "Fetches the endpoints and renders. No bundler: a dependency whose job is trivial is the thing this project has refused everywhere else. Opens with main.rs."
+
+[[file]]
+path = "crates/pact-server/tests/page.rs"
+layer = "L4"
+unlocks_after = ["P6.2"]
+why = "The P6.3 and P6.4 gates. The headline numbers must be in the served HTML before any JavaScript runs, and the graph's shapes must carry the diagnosis."
+
+[[file]]
+path = "scripts/deploy"
+layer = "L4"
+unlocks_after = ["P6.4"]
+why = "P6.5 and P6.6. Deployment and the corpus sync, which is one command or the dashboard is a screenshot."
+
+[[file]]
+path = "crates/pact-server/tests/exposure.rs"
+layer = "L4"
+unlocks_after = ["P6.4"]
+why = "The provable half of P6.5. A single-address bind on a CGNAT range is a socket-level guarantee rather than a firewall rule, and it is the half that does not need a second machine."
+
+# ─────────────────────────────────────────────── L4  the instrument
+
+[[file]]
+path = "crates/pact-wasm/src/lib.rs"
+layer = "L4"
+unlocks_after = ["P6.4"]
+why = "The engine, across a language boundary. pact-core has zero dependencies and no I/O, so INV-1 accidentally made it the most portable code in the workspace; wasm-bindgen lives here because INV-8 says dependencies live at L4."
+
+[[file]]
+path = "crates/pact-wasm/tests/same_trace.rs"
+layer = "L4"
+unlocks_after = ["P6.4"]
+why = "The P7.1 gate. A WASM run and a native run must produce byte-identical traces from the same seed: INV-3 crossing a language boundary, and the check that keeps one engine from becoming two."
+
+[[file]]
+path = "app/src/engine.ts"
+layer = "L4"
+unlocks_after = ["P7.1"]
+why = "The generated bindings. Opens after the engine is proven across the boundary, because a binding written against an unproven engine is one that gets rewritten."
+
+[[file]]
+path = "app/src/canvas.ts"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "Layout, render and transport. After the types, so a renamed field breaks the build rather than the picture."
+
+[[file]]
+path = "app/src/scrub.ts"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "The deterministic scrubber. Seeking to step N twice must give identical frames, which INV-3 makes possible and which Machinations itself does badly."
+
+[[file]]
+path = "app/src/inspect.ts"
+layer = "L4"
+unlocks_after = ["P7.5"]
+why = "Inspector and protocol overlay. After the frame budget, because an overlay drawn on a canvas that cannot hold 60fps is one nobody keeps open."
+
+[[file]]
+path = "app/src/edit.ts"
+layer = "L4"
+unlocks_after = ["P7.8"]
+why = "Editing, and the round trip back to a SKILL.md. Last, because it is the only part that writes to the corpus, and writing to something you cannot yet fully see is how a corpus acquires changes nobody meant."
+
+[[file]]
+path = "crates/pact-wasm/tests/run_wasm.mjs"
+layer = "L4"
+unlocks_after = ["P6.4"]
+why = "The host side of the boundary, called by same_trace.rs. Thirty lines of the raw WebAssembly API, because the boundary is a flat buffer and wasm-bindgen would be a build step."
+
+[[file]]
+path = "app/src/types.ts"
+layer = "L4"
+unlocks_after = ["P7.1"]
+why = "GENERATED, never edited. Written by a unit test in view.rs from the same structs the server serialises, so the two cannot describe different shapes. Checked in so the TypeScript builds without running Rust first."
+
+[[file]]
+path = "app/index.html"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "The instrument's page. Opens with canvas.ts, which it renders."
+
+[[file]]
+path = "app/src/main.ts"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "The rendering half. canvas.ts is pure so the gate can check the arithmetic without a browser; this is the part that needs one."
+
+[[file]]
+path = "app/app.css"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "Hand-written, no build step. deno bundle emits the JavaScript and nothing processes the CSS."
+
+[[file]]
+path = "app/tests/canvas_test.ts"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "The P7.3 gate. Runs against the live corpus through the server, because a canvas checked against a fixture is checked against something nobody looks at."
+
+[[file]]
+path = "app/deno.json"
+layer = "L4"
+unlocks_after = ["P7.2"]
+why = "The TypeScript toolchain, entire: lib settings, a check task, a bundle task. One config file and one already-installed binary, which is the answer this project has given every time a build step was proposed."
+
+# ─────────────────────────────────────────────── P8  reading what isn't typed
+
+[[file]]
+path = "convex/schema.ts"
+layer = "L4"
+unlocks_after = ["P7.3"]
+why = "The corpus database. First because everything else in P8 writes to a shape, and a shape argued over after the writers exist is one that gets bent to fit them."
+
+[[file]]
+path = "convex/readings.ts"
+layer = "L4"
+unlocks_after = ["P7.3"]
+why = "Opens WITH the schema, not after P8.1, because P8.1's gate needs it: an index named by_dedupeKey declares an intent and enforces nothing, so content-keying has to be a mutation that reads before it writes. A file a gate's proof depends on opens no later than that gate."
+
+[[file]]
+path = "scripts/gate_content_keyed"
+layer = "L4"
+unlocks_after = ["P7.3"]
+why = "The second half of P8.1's gate, run against the live deployment rather than a mock: ten snapshots of one unchanged skill, then count the rows. Not a canary — it needs network, and a canary that can fail for being offline stops meaning anything."
+
+[[file]]
+path = "crates/pact-reader/src/prompt.rs"
+layer = "L4"
+unlocks_after = ["P8.1"]
+why = "The prompt, and the vocabulary it is closed over. Opens after the schema because the reading it produces has to fit somewhere."
+
+[[file]]
+path = "crates/pact-reader/src/cache.rs"
+layer = "L4"
+unlocks_after = ["P8.1"]
+why = "Content-keyed cache, mirroring the readings table exactly. Local first, so the reader works before Convex exists and offline afterwards."
+
+[[file]]
+path = "crates/pact-reader/src/openai.rs"
+layer = "L4"
+unlocks_after = ["P8.2"]
+why = "The call. After the prompt and the cache, because a client written before either becomes shaped like the HTTP API rather than like the task."
+
+[[file]]
+path = "crates/pact-reader/src/lib.rs"
+layer = "L4"
+unlocks_after = ["P8.1"]
+why = "The crate root. Its module list tracks this map."
+
+[[file]]
+path = "crates/pact-reader/tests/accuracy.rs"
+layer = "L4"
+unlocks_after = ["P8.2"]
+why = "The P8.3 gate. 150 hand-typed skills are a labelled test set that already exists, and the floor is the trivial baseline of always guessing the most common value — 55.3% on input_type, which is high enough that a model scoring 60 would look like a result and be worthless."
+
+[[file]]
+path = "crates/pact-server/src/mirror.rs"
+layer = "L4"
+unlocks_after = ["P8.3"]
+why = "The sole writer to Convex, over HTTP. After accuracy, because mirroring readings nobody has measured writes a cache of unknown quality."

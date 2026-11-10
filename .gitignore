@@ -1,0 +1,13 @@
+target/
+Cargo.lock.bak
+.DS_Store
+__pycache__/
+*.pyc
+
+# The Convex CLI is npm-only. Its tree is ignored; the app is Deno.
+node_modules/
+package-lock.json
+
+# Written by `convex dev`. Holds the deployment name and its admin key.
+.env.local
+var/

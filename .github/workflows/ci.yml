@@ -1,0 +1,51 @@
+name: ci
+
+# Order matters. `pz check` runs FIRST, before the build gets a chance to be
+# green. Working ahead of a gate should fail on its own terms rather than
+# being masked by a passing test suite.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nothing was edited while locked
+        run: ./scripts/pz check
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # pact-server embeds this module at compile time.
+      - name: Build the browser module
+        run: cargo build -p pact-wasm --target wasm32-unknown-unknown --release
+
+      - name: Invariant canaries
+        run: ./scripts/canaries.sh
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Lint wall
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace
+
+      # The differential test that keeps the rewrite honest. Skipped until the
+      # corpus crate exists; a job that silently passes because it has nothing
+      # to compare is worse than no job, so it fails loudly if the crate is
+      # present and the oracle is absent.
+      - name: Matches the Python oracle
+        run: |
+          if [ -d crates/pact-corpus/tests ] && \
+             ls crates/pact-corpus/tests/*.rs >/dev/null 2>&1; then
+            cargo test -p pact-corpus --test matches_python
+          else
+            echo "corpus crate not yet unlocked; skipping differential test"
+          fi
